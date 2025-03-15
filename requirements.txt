@@ -4,4 +4,5 @@ google-generativeai
 agno==0.1.0
 llama-index-core>=0.10.0
 llama-index-readers-file>=0.1.0
+llama-index-embeddings-openai>=0.1.0
 python-dotenv>=1.0.0
