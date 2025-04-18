@@ -18,6 +18,13 @@ from llama_index.core import (
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.retrievers import VectorIndexRetriever
 import os
+
+
+# Add these lines at the top of your script to disable tiktoken caching
+os.environ["TIKTOKEN_CACHE_DIR"] = ""
+# Alternatively, set it to a directory you have permission to write to:
+# os.makedirs("./tiktoken_cache", exist_ok=True)
+# os.environ["TIKTOKEN_CACHE_DIR"] = "./tiktoken_cach
 from llama_index.core import settings
 # Create a cache directory in a location you have permissions for
 os.makedirs("./cache_data", exist_ok=True)
