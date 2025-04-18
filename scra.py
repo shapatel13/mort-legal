@@ -593,7 +593,7 @@ def create_agent(knowledge_base):
     try:
         agent = Agent(
             name="Medical-Legal Expert",
-            model=Gemini(id="gemini-2.0-flash-exp", api_key=GEMINI_API_KEY),
+            model=Gemini(id="gemini-2.5-flash-preview-04-17", api_key=GEMINI_API_KEY),
             knowledge=knowledge_base,
             search_knowledge=True,
             description="Expert medical and legal analyst specializing in medical malpractice case review, with focus on critical clinical events and root causes of patient deterioration.",
