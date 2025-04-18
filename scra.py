@@ -17,6 +17,12 @@ from llama_index.core import (
 )
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.retrievers import VectorIndexRetriever
+import os
+from llama_index.core import settings
+
+# Create a cache directory in a location you have permissions for
+os.makedirs("./cache_data", exist_ok=True)
+settings.settings.cache_dir = "./cache_data"
 
 # Add Agno imports
 from agno.agent import Agent
