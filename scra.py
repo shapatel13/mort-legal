@@ -7,7 +7,7 @@ import tempfile
 import io
 import PyPDF2
 import re
-
+from agno.tools.duckduckgo import DuckDuckGoTools
 from llama_index.core import (
     VectorStoreIndex,
     SimpleDirectoryReader,
@@ -605,7 +605,7 @@ def create_agent(knowledge_base):
     try:
         agent = Agent(
             name="Medical-Legal Expert",
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17", api_key=GEMINI_API_KEY),
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17", api_key=GEMINI_API_KEY),tools=[DuckDuckGoTools()],
             knowledge=knowledge_base,
             search_knowledge=True,
             description="Expert medical and legal analyst specializing in medical malpractice case review, with focus on critical clinical events and root causes of patient deterioration.",
