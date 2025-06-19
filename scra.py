@@ -509,6 +509,7 @@ def get_analysis_prompt(query, analysis_type, probability=None, adjustments=None
         ### Critical Events Identification
         - Identify all critical medical events: ICU stays, shock states, vasopressor use, hypoxic events, AKI, code events
         - Provide specific details about each event (timing, severity, response)
+        -Use DuckDuckgo search feature to compare the management of the case to best practice guidelines when not available in your knowledgebase
         
         ### Key Clinical Events Timeline
         - Create chronological timeline with critical decision points
