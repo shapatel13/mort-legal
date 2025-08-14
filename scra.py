@@ -2,22 +2,18 @@ import streamlit as st
 import os
 import json
 from pathlib import Path
-import datetime
-import tempfile
 import io
-import PyPDF2
+import fitz  # PyMuPDF
 import re
 from agno.tools.duckduckgo import DuckDuckGoTools
 from llama_index.core import (
     VectorStoreIndex,
-    SimpleDirectoryReader,
     StorageContext,
     load_index_from_storage,
     Document
 )
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.retrievers import VectorIndexRetriever
-import os
 
 
 # Add these lines at the top of your script to disable tiktoken caching
@@ -74,8 +70,6 @@ if 'analysis_complete' not in st.session_state:
     st.session_state.analysis_complete = False
 if 'critical_events' not in st.session_state:
     st.session_state.critical_events = {}
-if 'temp_dir' not in st.session_state:
-    st.session_state.temp_dir = tempfile.mkdtemp()
 if 'search_results' not in st.session_state:
     st.session_state.search_results = []
 if 'chat_history' not in st.session_state:
@@ -96,15 +90,14 @@ def set_form_submitted():
 
 # Function to extract text from PDF
 def extract_text_from_pdf(pdf_file):
+    """Yield text from each page of the provided PDF file-like object."""
     try:
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        text = ""
-        for page_num in range(len(pdf_reader.pages)):
-            text += pdf_reader.pages[page_num].extract_text()
-        return text
+        with fitz.open(stream=pdf_file.read(), filetype="pdf") as doc:
+            for page in doc:
+                yield page.get_text()
     except Exception as e:
         st.error(f"Error extracting text from PDF: {str(e)}")
-        return ""
+        return
 
 
 # Trial Loss Probability Calculator functions
@@ -258,34 +251,23 @@ def extract_case_factors(medical_record_text):
     return case_factors
 
 
-def setup_knowledge_base(pdf_content):
-    """Set up knowledge base from PDF document."""
+def setup_knowledge_base(text_chunks):
+    """Set up knowledge base from an iterable of text chunks."""
     try:
-        # Create a unique ID for this knowledge base
-        kb_id = f"kb_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        # Create a temporary file for the PDF content
-        temp_file = os.path.join(st.session_state.temp_dir, f"temp_{kb_id}.pdf")
-        with open(temp_file, "wb") as f:
-            f.write(pdf_content)
-        
-        # Process the document
-        documents = SimpleDirectoryReader(input_files=[temp_file]).load_data()
-        
-        # Split text into chunks
         splitter = SentenceSplitter(chunk_size=1024)
-        nodes = splitter.get_nodes_from_documents(documents)
-        
-        # Create vector store index
+        nodes = []
+        for chunk in text_chunks:
+            doc = Document(text=chunk)
+            nodes.extend(splitter.get_nodes_from_documents([doc]))
+
         storage_context = StorageContext.from_defaults()
         index = VectorStoreIndex(nodes=nodes, storage_context=storage_context)
-        
-        # Create retriever and knowledge base
+
         retriever = VectorIndexRetriever(index=index, similarity_top_k=5)
         knowledge_base = LlamaIndexKnowledgeBase(retriever=retriever)
-        
+
         return knowledge_base, index, True
-        
+
     except Exception as e:
         st.error(f"Error setting up knowledge base: {str(e)}")
         return None, None, False
@@ -643,22 +625,29 @@ def create_agent(knowledge_base):
 def process_document(pdf_content, analysis_type, initial_query):
     """Process the document and set up the session state."""
     try:
-        # Extract text
-        pdf_text = extract_text_from_pdf(io.BytesIO(pdf_content))
-        
-        if not pdf_text:
-            st.error("Could not extract text from PDF. Please ensure it's a valid document.")
-            return False
-        
-        # Setup knowledge base
-        knowledge_base, index, success = setup_knowledge_base(pdf_content)
-        
+        # Extract text and build knowledge base on the fly
+        text_generator = extract_text_from_pdf(io.BytesIO(pdf_content))
+        collected_text = []
+
+        def streaming_chunks():
+            for page_text in text_generator:
+                collected_text.append(page_text)
+                yield page_text
+
+        knowledge_base, index, success = setup_knowledge_base(streaming_chunks())
+
         if not success:
             st.error("Failed to set up knowledge base.")
             return False
-            
+
         st.session_state.knowledge_base = knowledge_base
-        
+
+        pdf_text = "\n".join(collected_text)
+
+        if not pdf_text:
+            st.error("Could not extract text from PDF. Please ensure it's a valid document.")
+            return False
+
         # Auto-extract case factors
         st.session_state.case_factors = extract_case_factors(pdf_text)
         
