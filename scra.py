@@ -1,23 +1,18 @@
 import streamlit as st
 import os
-import json
-from pathlib import Path
 import datetime
 import tempfile
-import io
-import PyPDF2
+import fitz  # PyMuPDF for fast and accurate PDF processing
 import re
 from agno.tools.duckduckgo import DuckDuckGoTools
 from llama_index.core import (
     VectorStoreIndex,
     SimpleDirectoryReader,
-    StorageContext,
-    load_index_from_storage,
-    Document
+    StorageContext
 )
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.retrievers import VectorIndexRetriever
-import os
+from llama_index.readers.file import PyMuPDFReader
 
 
 # Add these lines at the top of your script to disable tiktoken caching
@@ -95,13 +90,11 @@ def set_form_submitted():
 
 
 # Function to extract text from PDF
-def extract_text_from_pdf(pdf_file):
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract text from a PDF using PyMuPDF for speed and accuracy."""
     try:
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        text = ""
-        for page_num in range(len(pdf_reader.pages)):
-            text += pdf_reader.pages[page_num].extract_text()
-        return text
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            return "\n".join(page.get_text("text") for page in doc)
     except Exception as e:
         st.error(f"Error extracting text from PDF: {str(e)}")
         return ""
@@ -247,13 +240,12 @@ def extract_case_factors(medical_record_text):
                   "SIRS", "septic shock", "source of infection"]
     }
     
-    # Check for each keyword in the text
+    # Check for each keyword in the text using compiled regex for efficiency
     text_lower = medical_record_text.lower()
     for factor, word_list in keywords.items():
-        for keyword in word_list:
-            if keyword.lower() in text_lower:
-                case_factors[factor] = True
-                break
+        pattern = re.compile("|".join(re.escape(word.lower()) for word in word_list))
+        if pattern.search(text_lower):
+            case_factors[factor] = True
     
     return case_factors
 
@@ -269,11 +261,15 @@ def setup_knowledge_base(pdf_content):
         with open(temp_file, "wb") as f:
             f.write(pdf_content)
         
-        # Process the document
-        documents = SimpleDirectoryReader(input_files=[temp_file]).load_data()
-        
-        # Split text into chunks
-        splitter = SentenceSplitter(chunk_size=1024)
+        # Process the document using PyMuPDF for better large-file handling
+        reader = SimpleDirectoryReader(
+            input_files=[temp_file],
+            file_extractor={".pdf": PyMuPDFReader()}
+        )
+        documents = reader.load_data()
+
+        # Split text into manageable chunks
+        splitter = SentenceSplitter(chunk_size=800, chunk_overlap=50)
         nodes = splitter.get_nodes_from_documents(documents)
         
         # Create vector store index
@@ -644,7 +640,7 @@ def process_document(pdf_content, analysis_type, initial_query):
     """Process the document and set up the session state."""
     try:
         # Extract text
-        pdf_text = extract_text_from_pdf(io.BytesIO(pdf_content))
+        pdf_text = extract_text_from_pdf(pdf_content)
         
         if not pdf_text:
             st.error("Could not extract text from PDF. Please ensure it's a valid document.")
