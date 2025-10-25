@@ -7,6 +7,7 @@ import tempfile
 import io
 import PyPDF2
 import re
+from difflib import SequenceMatcher
 from agno.tools.duckduckgo import DuckDuckGoTools
 from llama_index.core import (
     VectorStoreIndex,
@@ -243,18 +244,40 @@ def extract_case_factors(medical_record_text):
                      "resuscitation", "ACLS", "defibrillation", "ventricular fibrillation"],
         "intubation": ["intubation", "intubated", "mechanical ventilation", "ventilator", 
                       "endotracheal tube", "ETT", "respiratory failure"],
-        "sepsis": ["sepsis", "septic", "bacteremia", "systemic inflammatory response", 
+        "sepsis": ["sepsis", "septic", "bacteremia", "systemic inflammatory response",
                   "SIRS", "septic shock", "source of infection"]
     }
     
-    # Check for each keyword in the text
-    text_lower = medical_record_text.lower()
+    # Build regex patterns with word boundaries and simple morphological variations
+    keyword_patterns = {}
     for factor, word_list in keywords.items():
+        patterns = []
         for keyword in word_list:
-            if keyword.lower() in text_lower:
-                case_factors[factor] = True
+            escaped = re.escape(keyword)
+            escaped = escaped.replace("\\ ", r"\\s+")
+            pattern = (
+                r"(?<!\bno\s)(?<!\bnot\s)\b" + escaped + r"(?:s|es|ed|ing)?\b"
+            )
+            patterns.append((pattern, keyword))
+        keyword_patterns[factor] = patterns
+
+    text_lower = medical_record_text.lower()
+
+    # Search text using regex patterns
+    for factor, pattern_list in keyword_patterns.items():
+        for pattern, base in pattern_list:
+            for match in re.finditer(pattern, text_lower, re.IGNORECASE):
+                start = match.start()
+                context_start = max(0, start-20)
+                context_end = match.end() + 20
+                context = text_lower[context_start:context_end]
+                ratio = SequenceMatcher(None, base.lower(), context).ratio()
+                if ratio >= 0.2:
+                    case_factors[factor] = True
+                    break
+            if case_factors[factor]:
                 break
-    
+
     return case_factors
 
 
